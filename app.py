@@ -1534,12 +1534,7 @@ def is_token_expired(created_at_str):
     return (datetime.now() - created).total_seconds() > TOKEN_EXPIRY_MINUTES * 60
 
 def send_otp_email(to_email, otp_code, db_name):
-    """Send OTP code via Resend HTTPS API."""
-    import os
-    import json
-    import urllib.request
-    import urllib.error
-
+    """Send OTP code via Gmail SMTP."""
     subject = f"[SecureRotate] Your verification code: {otp_code}"
 
     body = (
@@ -1550,74 +1545,7 @@ def send_otp_email(to_email, otp_code, db_name):
         f"If you did not request this, please ignore this email."
     )
 
-    # Get Resend API key from Railway environment variables
-    resend_api_key = os.getenv("RESEND_API_KEY")
-
-    if not resend_api_key:
-        print("ERROR: RESEND_API_KEY is not configured.")
-        return False
-
-    # Resend testing sender
-    from_email = "SecureRotate <onboarding@resend.dev>"
-
-    payload = {
-        "from": from_email,
-        "to": [to_email],
-        "subject": subject,
-        "text": body
-    }
-
-    data = json.dumps(payload).encode("utf-8")
-
-    request = urllib.request.Request(
-        "https://api.resend.com/emails",
-        data=data,
-        headers={
-            "Authorization": f"Bearer {resend_api_key}",
-            "Content-Type": "application/json",
-            "User-Agent": "SecureRotate/1.0"
-        },
-        method="POST"
-    )
-
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            response_body = response.read().decode("utf-8")
-
-            print("\n" + "=" * 60)
-            print(f"OTP EMAIL REQUEST SUCCESSFUL")
-            print(f"To: {to_email}")
-            print(f"Resend response: {response_body}")
-            print("=" * 60 + "\n")
-
-            return True
-
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="replace")
-
-        print("\n" + "=" * 60)
-        print(f"RESEND API ERROR")
-        print(f"HTTP Status: {e.code}")
-        print(f"Response: {error_body}")
-        print("=" * 60 + "\n")
-
-        return False
-
-    except urllib.error.URLError as e:
-        print("\n" + "=" * 60)
-        print("RESEND CONNECTION ERROR")
-        print(f"Error: {e}")
-        print("=" * 60 + "\n")
-
-        return False
-
-    except Exception as e:
-        print("\n" + "=" * 60)
-        print("OTP EMAIL ERROR")
-        print(f"Error: {e}")
-        print("=" * 60 + "\n")
-
-        return False
+    return send_real_email(to_email, subject, body)
 
 
 @app.route("/reset/<token>")

@@ -1541,6 +1541,7 @@ def send_otp_email(to_email, otp_code, db_name):
     import urllib.error
 
     subject = f"[SecureRotate] Your verification code: {otp_code}"
+
     body = (
         f"Your SecureRotate one-time verification code is:\n\n"
         f"    {otp_code}\n\n"
@@ -1549,15 +1550,14 @@ def send_otp_email(to_email, otp_code, db_name):
         f"If you did not request this, please ignore this email."
     )
 
+    # Get Resend API key from Railway environment variables
     resend_api_key = os.getenv("RESEND_API_KEY")
 
     if not resend_api_key:
-        print("RESEND_API_KEY is not configured.")
+        print("ERROR: RESEND_API_KEY is not configured.")
         return False
 
-    # Resend's default testing sender.
-    # For production, replace this with an email address
-    # from a domain verified in Resend.
+    # Resend testing sender
     from_email = "SecureRotate <onboarding@resend.dev>"
 
     payload = {
@@ -1583,33 +1583,69 @@ def send_otp_email(to_email, otp_code, db_name):
         with urllib.request.urlopen(request, timeout=20) as response:
             response_body = response.read().decode("utf-8")
 
-        print(f"\n{'='*50}")
-        print(f"  OTP SENT to {to_email}")
-        print(f"  Resend response: {response_body}")
-        print(f"{'='*50}\n")
+            print("\n" + "=" * 60)
+            print(f"OTP EMAIL REQUEST SUCCESSFUL")
+            print(f"To: {to_email}")
+            print(f"Resend response: {response_body}")
+            print("=" * 60 + "\n")
 
-        return True
+            return True
 
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace")
-        print(f"Resend API error {e.code}: {error_body}")
+
+        print("\n" + "=" * 60)
+        print(f"RESEND API ERROR")
+        print(f"HTTP Status: {e.code}")
+        print(f"Response: {error_body}")
+        print("=" * 60 + "\n")
+
+        return False
+
+    except urllib.error.URLError as e:
+        print("\n" + "=" * 60)
+        print("RESEND CONNECTION ERROR")
+        print(f"Error: {e}")
+        print("=" * 60 + "\n")
+
         return False
 
     except Exception as e:
-        print(f"Failed to send OTP email via Resend: {e}")
+        print("\n" + "=" * 60)
+        print("OTP EMAIL ERROR")
+        print(f"Error: {e}")
+        print("=" * 60 + "\n")
+
         return False
+
 
 @app.route("/reset/<token>")
 def serve_reset_page(token):
     with connect() as conn:
-        row = conn.execute("SELECT * FROM reset_tokens WHERE token = ?", (token,)).fetchone()
-        if not row:
-            return "<h1>Link Expired</h1><p>This reset link has already been used or is invalid.</p>", 404
-        if is_token_expired(row["created_at"]):
-            conn.execute("DELETE FROM reset_tokens WHERE token = ?", (token,))
-            return "<h1>Link Expired</h1><p>This reset link has expired. Please request a new one from your admin.</p>", 410
-    return send_file(PUBLIC / "reset.html")
+        row = conn.execute(
+            "SELECT * FROM reset_tokens WHERE token = ?",
+            (token,)
+        ).fetchone()
 
+        if not row:
+            return (
+                "<h1>Link Expired</h1>"
+                "<p>This reset link has already been used or is invalid.</p>"
+            ), 404
+
+        if is_token_expired(row["created_at"]):
+            conn.execute(
+                "DELETE FROM reset_tokens WHERE token = ?",
+                (token,)
+            )
+
+            return (
+                "<h1>Link Expired</h1>"
+                "<p>This reset link has expired. "
+                "Please request a new one from your admin.</p>"
+            ), 410
+
+    return send_file(PUBLIC / "reset.html")
 @app.route("/api/reset/<token>", methods=["GET"])
 def api_reset_info(token):
     with connect() as conn:

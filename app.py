@@ -1574,7 +1574,7 @@ def send_otp_email(to_email, otp_code, db_name):
         data=data,
         headers={
             "Authorization": f"Bearer {resend_api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
             "User-Agent": "SecureRotate/1.0"
         },
         method="POST"

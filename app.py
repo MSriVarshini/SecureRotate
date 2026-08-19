@@ -1534,7 +1534,12 @@ def is_token_expired(created_at_str):
     return (datetime.now() - created).total_seconds() > TOKEN_EXPIRY_MINUTES * 60
 
 def send_otp_email(to_email, otp_code, db_name):
-    """Send OTP code via real Gmail SMTP."""
+    """Send OTP code via Resend HTTPS API."""
+    import os
+    import json
+    import urllib.request
+    import urllib.error
+
     subject = f"[SecureRotate] Your verification code: {otp_code}"
     body = (
         f"Your SecureRotate one-time verification code is:\n\n"
@@ -1543,23 +1548,55 @@ def send_otp_email(to_email, otp_code, db_name):
         f"It expires in {TOKEN_EXPIRY_MINUTES} minutes. Do not share this code.\n\n"
         f"If you did not request this, please ignore this email."
     )
-    msg = EmailMessage()
-    msg.set_content(body)
-    msg["Subject"] = subject
-    msg["From"] = f"SecureRotate <{SMTP_EMAIL}>"
-    msg["To"] = to_email
+
+    resend_api_key = os.getenv("RESEND_API_KEY")
+
+    if not resend_api_key:
+        print("RESEND_API_KEY is not configured.")
+        return False
+
+    # Resend's default testing sender.
+    # For production, replace this with an email address
+    # from a domain verified in Resend.
+    from_email = "SecureRotate <onboarding@resend.dev>"
+
+    payload = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "text": body
+    }
+
+    data = json.dumps(payload).encode("utf-8")
+
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {resend_api_key}",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(SMTP_EMAIL, SMTP_APP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
+        with urllib.request.urlopen(request, timeout=20) as response:
+            response_body = response.read().decode("utf-8")
+
         print(f"\n{'='*50}")
-        print(f"  OTP SENT to {to_email}: {otp_code}")
+        print(f"  OTP SENT to {to_email}")
+        print(f"  Resend response: {response_body}")
         print(f"{'='*50}\n")
+
         return True
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        print(f"Resend API error {e.code}: {error_body}")
+        return False
+
     except Exception as e:
-        print(f"Failed to send OTP email: {e}")
+        print(f"Failed to send OTP email via Resend: {e}")
         return False
 
 @app.route("/reset/<token>")
